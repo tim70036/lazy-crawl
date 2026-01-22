@@ -9,6 +9,7 @@ const FAVORITES_URL = 'https://www.facebook.com/?filter=favorites&sk=h_chr';
 interface Post {
   author: string;
   content: string;
+  url: string;
 }
 
 async function ensureAuthDir(): Promise<void> {
@@ -88,14 +89,25 @@ async function extractPosts(page: Page): Promise<Post[]> {
         });
 
         let author = 'Unknown';
+        let url = '';
         if (container.asElement()) {
           const authorEl = await container.asElement()!.$('[data-ad-rendering-role="profile_name"] span span');
           if (authorEl) author = await authorEl.innerText().catch(() => 'Unknown');
+
+          // Extract post URL from timestamp link (links containing /posts/, story_fbid, or pfbid)
+          const urlEl = await container.asElement()!.$('a[href*="/posts/"], a[href*="story_fbid"], a[href*="pfbid"]');
+          if (urlEl) {
+            const href = await urlEl.getAttribute('href').catch(() => '');
+            if (href) {
+              url = href.startsWith('http') ? href : `https://www.facebook.com${href}`;
+            }
+          }
         }
 
         posts.push({
           author: author.trim(),
-          content: cleanContent.substring(0, 500)
+          content: cleanContent.substring(0, 500),
+          url
         });
         
         console.log(`Captured post ${posts.length}: ${author} - ${cleanContent.substring(0, 30)}...`);
@@ -141,6 +153,7 @@ async function crawl(): Promise<void> {
     for (const post of posts) {
       console.log('---');
       console.log(`Author: ${post.author}`);
+      console.log(`URL: ${post.url || 'N/A'}`);
       console.log(`Content: ${post.content}\n`);
     }
     console.log(`Total: ${posts.length} posts`);

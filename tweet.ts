@@ -16,6 +16,7 @@ for (const tweet of result.list) {
 
     console.log(`${tweet.createdAt} - ${tweet.id}`);
     console.log(`${tweet.tweetBy.fullName} - ${tweet.tweetBy.userName}`);
+    console.log(`URL: ${tweet.url}`);
 
     if (tweet.quoted) {
         console.log('Quoted tweet:');
