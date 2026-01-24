@@ -34,9 +34,34 @@ Crawls Facebook favorites feed and extracts posts.
 **Usage:**
 ```bash
 bun fb.ts --login  # First time: manual login, saves session
-bun fb.ts          # Crawl favorites feed
+bun fb.ts          # Crawl favorites feed, outputs to output/fb-{timestamp}.md
 ```
 
 ### tweet.ts - Twitter/X Crawler
 
-(To be documented)
+Crawls a Twitter list using the rettiwt-api package.
+
+**Requirements:**
+- `RETTIWT_API_KEY` environment variable in `.env`
+
+**Usage:**
+```bash
+bun tweet.ts  # Crawl Twitter list, outputs to output/tweet-{timestamp}.md
+```
+
+### utils.ts - Shared Utilities
+
+Common utilities for state management and markdown generation.
+
+**Features:**
+- `crawl-state.json`: Tracks last seen post/tweet for incremental crawling
+- `output/`: Timestamped markdown files with YAML frontmatter
+- Incremental crawling: Stops when reaching previously seen content
+
+### Output Format
+
+Crawl results are saved to `output/{platform}-{timestamp}.md` with YAML frontmatter containing:
+- `platform`: facebook or twitter
+- `crawlTime`: ISO timestamp
+- `postCount`: Number of posts captured
+- `stoppedReason`: "reached_previous", "scroll_limit", or "api_limit"

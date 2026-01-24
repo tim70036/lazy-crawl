@@ -1,16 +1,27 @@
 import { chromium, type Page } from 'playwright';
 import { existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
+import {
+  readCrawlState,
+  updateFacebookState,
+  generateOutputPath,
+  generateFacebookMD,
+  writeMDFile,
+  extractFacebookPostId,
+  createContentHash,
+  isPostSeen,
+  type FacebookPost,
+  type CrawlResult,
+  type StoppedReason,
+  type SeenPost,
+} from './utils';
 
 const AUTH_DIR = './fb-auth';
 const STATE_FILE = join(AUTH_DIR, 'state.json');
 const FAVORITES_URL = 'https://www.facebook.com/?filter=favorites&sk=h_chr';
 
-interface Post {
-  author: string;
-  content: string;
-  url: string;
-}
+// Re-export for backwards compatibility
+type Post = FacebookPost;
 
 async function ensureAuthDir(): Promise<void> {
   if (!existsSync(AUTH_DIR)) {
@@ -48,14 +59,16 @@ async function login(): Promise<void> {
   console.log('Browser closed. You can now run: bun run fb.ts');
 }
 
-async function extractPosts(page: Page): Promise<Post[]> {
+async function extractPosts(page: Page, seenPosts: SeenPost[]): Promise<CrawlResult<Post>> {
   const posts: Post[] = [];
   const seenContent = new Set<string>();
+  let stoppedReason: StoppedReason = 'scroll_limit';
 
   await page.waitForSelector('[data-ad-rendering-role="story_message"]', { timeout: 10000 }).catch(() => {});
 
   const scrollCount = 10;
-  
+
+  outerLoop:
   for (let scroll = 0; scroll < scrollCount; scroll++) {
     // Click "Show more" buttons currently visible
     const showMoreButtons = await page.$$('[role="button"]:has-text("查看更多"), [role="button"]:has-text("See more")');
@@ -74,7 +87,7 @@ async function extractPosts(page: Page): Promise<Post[]> {
         const cleanContent = content.replace(/查看更多|See more|顯示更多/g, '').trim();
 
         if (!cleanContent) continue;
-        
+
         const contentKey = cleanContent.substring(0, 100);
         if (seenContent.has(contentKey)) continue;
         seenContent.add(contentKey);
@@ -104,12 +117,23 @@ async function extractPosts(page: Page): Promise<Post[]> {
           }
         }
 
+        // Check if we've reached a previously seen post using multi-post matching
+        const postId = extractFacebookPostId(url);
+        const contentHash = createContentHash(cleanContent);
+        
+        if (seenPosts.length > 0 && isPostSeen(postId, contentHash, seenPosts)) {
+          const matchType = postId ? `post ID: ${postId}` : `content hash: ${contentHash}`;
+          console.log(`\nReached previously seen post (${matchType})`);
+          stoppedReason = 'reached_previous';
+          break outerLoop;
+        }
+
         posts.push({
           author: author.trim(),
           content: cleanContent.substring(0, 500),
           url
         });
-        
+
         console.log(`Captured post ${posts.length}: ${author} - ${cleanContent.substring(0, 30)}...`);
       } catch {
         continue;
@@ -120,13 +144,23 @@ async function extractPosts(page: Page): Promise<Post[]> {
     await page.waitForTimeout(1000);
   }
 
-  return posts;
+  return { posts, stoppedReason };
 }
 
 async function crawl(): Promise<void> {
   if (!existsSync(STATE_FILE)) {
     console.error('No saved session. Run: bun run fb.ts --login');
     process.exit(1);
+  }
+
+  // Read previous crawl state
+  const state = readCrawlState();
+  const seenPosts = state.facebook.lastSeenPosts || [];
+
+  if (seenPosts.length > 0) {
+    console.log(`Incremental crawl: tracking ${seenPosts.length} previously seen posts\n`);
+  } else {
+    console.log('First crawl: no previous state found\n');
   }
 
   const browser = await chromium.launch({ headless: false });
@@ -144,7 +178,7 @@ async function crawl(): Promise<void> {
   await page.waitForTimeout(2000);
 
   console.log('Scrolling and capturing posts...\n');
-  const posts = await extractPosts(page);
+  const { posts, stoppedReason } = await extractPosts(page, seenPosts);
 
   console.log('\n--- Results ---');
   if (posts.length === 0) {
@@ -157,6 +191,17 @@ async function crawl(): Promise<void> {
       console.log(`Content: ${post.content}\n`);
     }
     console.log(`Total: ${posts.length} posts`);
+    console.log(`Stopped reason: ${stoppedReason}`);
+
+    // Generate and write MD file
+    const crawlTime = new Date().toISOString();
+    const mdContent = generateFacebookMD(posts, { crawlTime, stoppedReason });
+    const outputPath = generateOutputPath('fb');
+    writeMDFile(outputPath, mdContent);
+
+    // Update state with all captured posts
+    updateFacebookState(posts.map(p => ({ url: p.url, content: p.content })));
+    console.log(`State updated with ${posts.length} new posts`);
   }
 
   await browser.close();

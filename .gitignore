@@ -36,9 +36,19 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 # Facebook auth session state
 fb-auth/
 
+# Gmail auth tokens
+gmail-auth/
+
+# Gmail config (contains no secrets, but user-specific)
+gmail-config.json
+
 # Debug files
 fb-debug.png
 fb-article-debug.html
 
 # Serena MCP
 .serena/
+
+# Crawl output and state
+output/
+crawl-state.json
