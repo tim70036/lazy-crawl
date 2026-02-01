@@ -13,15 +13,16 @@ import {
   generateGmailMD,
   writeMDFile,
 } from './utils';
+import { log } from './logger';
 
-// Configuration
-const AUTH_DIR = './gmail-auth';
+// Configuration (via environment variables)
+const AUTH_DIR = process.env.GMAIL_AUTH_DIR ?? './gmail-auth';
 const TOKENS_FILE = `${AUTH_DIR}/tokens.json`;
-const CONFIG_FILE = './gmail-config.json';
+const CONFIG_FILE = process.env.GMAIL_CONFIG_FILE ?? './gmail-config.json';
 const SCOPES = ['https://www.googleapis.com/auth/gmail.readonly'];
 const REDIRECT_URI = 'http://localhost:3000/callback';
 
-interface GmailConfig {
+export interface GmailConfig {
   allowedSenders: string[];
   excludeLabels: string[];
   maxAgeDays: number;
@@ -39,8 +40,8 @@ const DEFAULT_CONFIG: GmailConfig = {
     'verify@x.com',
   ],
   excludeLabels: ['SPAM', 'TRASH'],
-  maxAgeDays: 30,
-  maxEmails: 100,
+  maxAgeDays: Number(process.env.GMAIL_MAX_AGE_DAYS) || 30,
+  maxEmails: Number(process.env.GMAIL_MAX_EMAILS) || 100,
 };
 
 // Initialize turndown for HTML to markdown conversion
@@ -100,7 +101,7 @@ function getOAuth2Client(): OAuth2Client {
   const clientSecret = process.env.GMAIL_CLIENT_SECRET;
 
   if (!clientId || !clientSecret) {
-    console.error('Error: GMAIL_CLIENT_ID and GMAIL_CLIENT_SECRET must be set in .env');
+    log.fatal('GMAIL_CLIENT_ID and GMAIL_CLIENT_SECRET must be set in .env');
     process.exit(1);
   }
 
@@ -137,7 +138,7 @@ function loadConfig(): GmailConfig {
 function saveDefaultConfig(): void {
   if (!existsSync(CONFIG_FILE)) {
     writeFileSync(CONFIG_FILE, JSON.stringify(DEFAULT_CONFIG, null, 2));
-    console.log(`Created ${CONFIG_FILE} - edit it to add your newsletter senders`);
+    log.success(`Created ${CONFIG_FILE} - edit it to add your newsletter senders`);
   }
 }
 
@@ -150,8 +151,8 @@ async function performOAuthLogin(): Promise<void> {
     prompt: 'consent',
   });
 
-  console.log('Starting OAuth flow...');
-  console.log('Opening browser for Google authorization...');
+  log.start('Starting OAuth flow...');
+  log.info('Opening browser for Google authorization...');
 
   return new Promise((resolve, reject) => {
     const server = createServer(async (req, res) => {
@@ -176,7 +177,7 @@ async function performOAuthLogin(): Promise<void> {
             <p>You can close this window and return to the terminal.</p>
           `);
 
-          console.log('\n✓ OAuth tokens saved to', TOKENS_FILE);
+          log.success(`OAuth tokens saved to ${TOKENS_FILE}`);
           server.close();
           resolve();
         }
@@ -188,7 +189,7 @@ async function performOAuthLogin(): Promise<void> {
     });
 
     server.listen(3000, async () => {
-      console.log('Callback server listening on http://localhost:3000');
+      log.info('Callback server listening on http://localhost:3000');
       await open(authUrl);
     });
   });
@@ -199,7 +200,7 @@ async function getAuthenticatedClient(): Promise<OAuth2Client> {
   const tokens = loadTokens();
 
   if (!tokens) {
-    console.error('No tokens found. Run with --login first.');
+    log.fatal('No tokens found. Run with --login first.');
     process.exit(1);
   }
 
@@ -207,7 +208,7 @@ async function getAuthenticatedClient(): Promise<OAuth2Client> {
 
   // Check if token is expired and refresh if needed
   if (tokens.expiry_date && tokens.expiry_date < Date.now()) {
-    console.log('Token expired, refreshing...');
+    log.info('Token expired, refreshing...');
     const { credentials } = await oauth2Client.refreshAccessToken();
     saveTokens(credentials as Tokens);
     oauth2Client.setCredentials(credentials);
@@ -216,7 +217,7 @@ async function getAuthenticatedClient(): Promise<OAuth2Client> {
   return oauth2Client;
 }
 
-function buildSenderQuery(sender: string, config: GmailConfig): string {
+export function buildSenderQuery(sender: string, config: GmailConfig): string {
   const excludeLabels = config.excludeLabels.map((label) => `-label:${label}`);
 
   return [
@@ -226,18 +227,18 @@ function buildSenderQuery(sender: string, config: GmailConfig): string {
   ].join(' ');
 }
 
-function extractHeader(headers: gmail_v1.Schema$MessagePartHeader[], name: string): string {
+export function extractHeader(headers: gmail_v1.Schema$MessagePartHeader[], name: string): string {
   const header = headers?.find((h) => h.name?.toLowerCase() === name.toLowerCase());
   return header?.value || '';
 }
 
-function decodeBase64Url(data: string): string {
+export function decodeBase64Url(data: string): string {
   // Convert base64url to regular base64
   const base64 = data.replace(/-/g, '+').replace(/_/g, '/');
   return Buffer.from(base64, 'base64').toString('utf-8');
 }
 
-function cleanMarkdown(md: string): string {
+export function cleanMarkdown(md: string): string {
   return md
     // Remove lines that are just invisible characters
     .replace(/^[\s\u00AD\u034F\u061C\u115F\u1160\u17B4\u17B5\u180E\u2000-\u200F\u202A-\u202E\u2060-\u2064\u2066-\u206F\u3000\uFEFF\uFFA0­ ]+$/gm, '')
@@ -323,7 +324,7 @@ async function crawlSender(
   const emails: GmailEmail[] = [];
 
   const query = buildSenderQuery(sender, config);
-  console.log(`  Query: ${query}`);
+  log.debug(`  Query: ${query}`);
 
   let pageToken: string | undefined;
   let stoppedReason: StoppedReason = 'query_exhausted';
@@ -344,7 +345,7 @@ async function crawlSender(
 
       // Stop when we hit a seen email for this sender
       if (seenSet.has(msg.id)) {
-        console.log(`  Reached seen email for ${sender}, stopping.`);
+        log.info(`  Reached seen email for ${sender}, stopping.`);
         stoppedReason = 'reached_previous';
         return { emails, stoppedReason };
       }
@@ -352,7 +353,7 @@ async function crawlSender(
       // Fetch and process email
       const email = await fetchEmail(gmailClient, msg.id);
       emails.push(email);
-      console.log(`    [${emails.length}] ${email.subject.substring(0, 50)}...`);
+      log.info(`    [${emails.length}] ${email.subject.substring(0, 50)}...`);
 
       if (emails.length >= config.maxEmails) {
         stoppedReason = 'scroll_limit';
@@ -382,7 +383,7 @@ async function crawlNewsletters(): Promise<void> {
 
   // Crawl each sender independently
   for (const sender of config.allowedSenders) {
-    console.log(`\nCrawling sender: ${sender}`);
+    log.start(`Crawling sender: ${sender}`);
 
     // Normalize sender for lookup (use config pattern as key)
     const normalizedSender = sender.toLowerCase();
@@ -396,7 +397,7 @@ async function crawlNewsletters(): Promise<void> {
         config
       );
 
-      console.log(`  Found ${emails.length} new emails from ${sender}`);
+      log.info(`  Found ${emails.length} new emails from ${sender}`);
       allEmails.push(...emails);
       emailsBySender.set(sender, emails);
 
@@ -405,11 +406,11 @@ async function crawlNewsletters(): Promise<void> {
         finalStoppedReason = 'scroll_limit';
       }
     } catch (error) {
-      console.error(`  Error crawling ${sender}:`, error);
+      log.error(`  Error crawling ${sender}:`, error);
     }
   }
 
-  console.log(`\nTotal crawled: ${allEmails.length} emails`);
+  log.success(`Total crawled: ${allEmails.length} emails`);
 
   if (allEmails.length > 0) {
     // Update state with new email IDs (per sender pattern)
@@ -421,30 +422,32 @@ async function crawlNewsletters(): Promise<void> {
     const outputPath = generateOutputPath('gmail');
     writeMDFile(outputPath, md);
   } else {
-    console.log('No new emails to save.');
+    log.warn('No new emails to save.');
   }
 
-  console.log(`Stopped reason: ${finalStoppedReason}`);
+  log.info(`Stopped reason: ${finalStoppedReason}`);
 }
 
 // Main
-const args = process.argv.slice(2);
+if (import.meta.main) {
+  const args = process.argv.slice(2);
 
-if (args.includes('--login')) {
-  performOAuthLogin()
-    .then(() => {
-      console.log('\nLogin complete! You can now run: bun gmail.ts');
-      process.exit(0);
-    })
-    .catch((error) => {
-      console.error('Login failed:', error);
-      process.exit(1);
-    });
-} else {
-  crawlNewsletters()
-    .then(() => process.exit(0))
-    .catch((error) => {
-      console.error('Crawl failed:', error);
-      process.exit(1);
-    });
+  if (args.includes('--login')) {
+    performOAuthLogin()
+      .then(() => {
+        log.success('Login complete! You can now run: bun gmail.ts');
+        process.exit(0);
+      })
+      .catch((error) => {
+        log.fatal('Login failed:', error);
+        process.exit(1);
+      });
+  } else {
+    crawlNewsletters()
+      .then(() => process.exit(0))
+      .catch((error) => {
+        log.fatal('Crawl failed:', error);
+        process.exit(1);
+      });
+  }
 }

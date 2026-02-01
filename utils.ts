@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';
+import { log } from './logger';
 
 // Types
 export interface SeenPost {
@@ -55,9 +56,9 @@ export interface CrawlResult<T> {
   stoppedReason: StoppedReason;
 }
 
-// Constants
-const STATE_FILE = './crawl-state.json';
-const OUTPUT_DIR = './output';
+// Constants (configurable via environment variables)
+const STATE_FILE = process.env.CRAWL_STATE_FILE ?? './crawl-state.json';
+const OUTPUT_DIR = process.env.CRAWL_OUTPUT_DIR ?? './data/raw';
 
 // State management
 const DEFAULT_STATE: CrawlState = {
@@ -85,19 +86,19 @@ export function writeCrawlState(state: CrawlState): void {
 // Extract post ID from Facebook URL
 export function extractFacebookPostId(url: string): string | null {
   if (!url) return null;
-  
+
   // Try to extract pfbid
   const pfbidMatch = url.match(/pfbid([a-zA-Z0-9]+)/);
   if (pfbidMatch) return `pfbid${pfbidMatch[1].substring(0, 20)}`; // Truncate for consistency
-  
+
   // Try to extract story_fbid
   const storyMatch = url.match(/story_fbid=(\d+)/);
   if (storyMatch) return `story_${storyMatch[1]}`;
-  
+
   // Try to extract /posts/ ID
   const postsMatch = url.match(/\/posts\/(\d+)/);
   if (postsMatch) return `post_${postsMatch[1]}`;
-  
+
   return null;
 }
 
@@ -108,7 +109,7 @@ export function createContentHash(content: string): string {
     .trim()
     .toLowerCase()
     .substring(0, 150);
-  
+
   // Simple hash using character codes
   let hash = 0;
   for (let i = 0; i < normalized.length; i++) {
@@ -121,8 +122,8 @@ export function createContentHash(content: string): string {
 
 // Check if a post was previously seen
 export function isPostSeen(
-  postId: string | null, 
-  contentHash: string, 
+  postId: string | null,
+  contentHash: string,
   seenPosts: SeenPost[]
 ): boolean {
   for (const seen of seenPosts) {
@@ -142,18 +143,18 @@ const MAX_SEEN_POSTS = 10; // Track last 10 posts
 
 export function updateFacebookState(posts: Array<{ url: string; content: string }>): void {
   const state = readCrawlState();
-  
+
   // Create SeenPost entries for new posts
   const newSeenPosts: SeenPost[] = posts.map(post => ({
     postId: extractFacebookPostId(post.url),
     contentHash: createContentHash(post.content),
   }));
-  
+
   // Merge with existing, keeping most recent at front, limit total
   const merged = [...newSeenPosts, ...state.facebook.lastSeenPosts];
   state.facebook.lastSeenPosts = merged.slice(0, MAX_SEEN_POSTS);
   state.facebook.lastCrawlTime = new Date().toISOString();
-  
+
   writeCrawlState(state);
 }
 
@@ -277,7 +278,7 @@ ${postsContent}
 
 export function writeMDFile(path: string, content: string): void {
   writeFileSync(path, content, 'utf-8');
-  console.log(`\nOutput written to: ${path}`);
+  log.success(`Output written to: ${path}`);
 }
 
 // Gmail state management

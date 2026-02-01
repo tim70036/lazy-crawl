@@ -8,15 +8,22 @@ import {
   type TwitterPost,
   type StoppedReason,
 } from './utils';
+import { log } from './logger';
 
-const LIST_ID = '2012423364175143267';
-const MAX_PAGES = 10; // Maximum number of API pages to fetch
-const TWEETS_PER_PAGE = 30;
+// Configuration (via environment variables)
+const LIST_ID = process.env.TWITTER_LIST_ID;
+const MAX_PAGES = Number(process.env.TWITTER_MAX_PAGES) || 2;
+const TWEETS_PER_PAGE = Number(process.env.TWITTER_TWEETS_PER_PAGE) || 50;
+
+if (!LIST_ID) {
+  log.fatal('TWITTER_LIST_ID is required in .env');
+  process.exit(1);
+}
 
 async function crawl(): Promise<void> {
   const apiKey = process.env.RETTIWT_API_KEY;
   if (!apiKey) {
-    console.error('RETTIWT_API_KEY not found in .env');
+    log.fatal('RETTIWT_API_KEY not found in .env');
     process.exit(1);
   }
 
@@ -27,25 +34,26 @@ async function crawl(): Promise<void> {
   const lastSeenId = state.twitter.lastSeenId;
 
   if (lastSeenId) {
-    console.log(`Incremental crawl: will stop at tweet ID ${lastSeenId}\n`);
+    log.info(`Incremental crawl: will stop at tweet ID ${lastSeenId}`);
   } else {
-    console.log('First crawl: no previous state found\n');
+    log.info('First crawl: no previous state found');
   }
 
   const posts: TwitterPost[] = [];
-  let stoppedReason: StoppedReason = 'api_limit';
+  let stoppedReason: StoppedReason = 'scroll_limit'; // Default: hit MAX_PAGES threshold
   let cursor = '';
   let pageCount = 0;
 
   // Paginate through the list
   while (pageCount < MAX_PAGES) {
     pageCount++;
-    console.log(`Fetching page ${pageCount}...`);
+    log.info(`Fetching page ${pageCount}...`);
 
     const result = await rettiwt.list.tweets(LIST_ID, TWEETS_PER_PAGE, cursor);
 
     if (!result.list || result.list.length === 0) {
-      console.log('No more tweets found.');
+      log.warn('No more tweets found.');
+      stoppedReason = 'query_exhausted';
       break;
     }
 
@@ -54,7 +62,7 @@ async function crawl(): Promise<void> {
     for (const tweet of result.list) {
       // Check if we've reached a previously seen tweet
       if (lastSeenId && tweet.id === lastSeenId) {
-        console.log(`\nReached previously seen tweet: ${tweet.id}`);
+        log.info(`Reached previously seen tweet: ${tweet.id}`);
         stoppedReason = 'reached_previous';
         foundPrevious = true;
         break;
@@ -73,7 +81,7 @@ async function crawl(): Promise<void> {
 
       posts.push(post);
 
-      console.log(`Captured tweet ${posts.length}: ${post.author} - ${post.content.substring(0, 30)}...`);
+      log.info(`Captured tweet ${posts.length}: ${post.author} - ${post.content.substring(0, 30)}...`);
     }
 
     if (foundPrevious) {
@@ -82,40 +90,18 @@ async function crawl(): Promise<void> {
 
     // Check if there's a next page
     if (!result.next) {
-      console.log('No more pages available.');
+      log.warn('No more pages available.');
+      stoppedReason = 'query_exhausted';
       break;
     }
 
     cursor = result.next;
   }
 
-  console.log('\n--- Results ---');
   if (posts.length === 0) {
-    console.log('No tweets found.');
+    log.warn('No tweets found.');
   } else {
-    for (const post of posts) {
-      console.log('---');
-      console.log(`${post.createdAt} - ${post.id}`);
-      console.log(`${post.author} - @${post.username}`);
-      console.log(`URL: ${post.url}`);
-
-      if (post.quotedContent) {
-        console.log('Quoted tweet:');
-        console.log(post.quotedContent);
-      }
-
-      if (post.retweetedContent) {
-        console.log('Retweeted tweet:');
-        console.log(post.retweetedContent);
-      }
-
-      console.log('Tweet:');
-      console.log(post.content);
-      console.log('--------------------------------');
-    }
-
-    console.log(`Total: ${posts.length} tweets`);
-    console.log(`Stopped reason: ${stoppedReason}`);
+    log.success(`Total: ${posts.length} tweets (stopped: ${stoppedReason})`);
 
     // Generate and write MD file
     const crawlTime = new Date().toISOString();
@@ -126,9 +112,9 @@ async function crawl(): Promise<void> {
     // Update state with the first (newest) tweet's ID
     if (posts[0]) {
       updateTwitterState(posts[0].id);
-      console.log(`State updated with newest tweet ID: ${posts[0].id}`);
+      log.success(`State updated with newest tweet ID: ${posts[0].id}`);
     }
   }
 }
 
-crawl().catch(console.error);
+crawl().catch((e) => { log.fatal(e); process.exit(1); });

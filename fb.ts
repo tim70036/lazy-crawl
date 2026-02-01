@@ -15,10 +15,13 @@ import {
   type StoppedReason,
   type SeenPost,
 } from './utils';
+import { log } from './logger';
 
-const AUTH_DIR = './fb-auth';
+// Configuration (via environment variables)
+const AUTH_DIR = process.env.FB_AUTH_DIR ?? './fb-auth';
 const STATE_FILE = join(AUTH_DIR, 'state.json');
-const FAVORITES_URL = 'https://www.facebook.com/?filter=favorites&sk=h_chr';
+const FAVORITES_URL = process.env.FB_FAVORITES_URL ?? 'https://www.facebook.com/?filter=favorites&sk=h_chr';
+const MAX_SCROLL = Number(process.env.FB_MAX_SCROLL) || 50;
 
 // Re-export for backwards compatibility
 type Post = FacebookPost;
@@ -30,9 +33,9 @@ async function ensureAuthDir(): Promise<void> {
 }
 
 async function login(): Promise<void> {
-  console.log('Opening browser for manual login...');
-  console.log('Please log in to Facebook manually.');
-  console.log('After logging in, press Enter in this terminal to save the session.\n');
+  log.info('Opening browser for manual login...');
+  log.info('Please log in to Facebook manually.');
+  log.info('After logging in, press Enter in this terminal to save the session.\n');
 
   await ensureAuthDir();
 
@@ -43,8 +46,8 @@ async function login(): Promise<void> {
   await page.goto('https://www.facebook.com/');
 
   // Wait for user to complete login
-  console.log('Waiting for you to log in...');
-  console.log('Press Enter when you have successfully logged in.');
+  log.info('Waiting for you to log in...');
+  log.info('Press Enter when you have successfully logged in.');
 
   // Read from stdin to wait for user confirmation
   const reader = Bun.stdin.stream().getReader();
@@ -53,10 +56,10 @@ async function login(): Promise<void> {
 
   // Save the session state
   await context.storageState({ path: STATE_FILE });
-  console.log(`\nSession saved to ${STATE_FILE}`);
+  log.success(`Session saved to ${STATE_FILE}`);
 
   await browser.close();
-  console.log('Browser closed. You can now run: bun run fb.ts');
+  log.success('Browser closed. You can now run: bun run fb.ts');
 }
 
 async function extractPosts(page: Page, seenPosts: SeenPost[]): Promise<CrawlResult<Post>> {
@@ -66,7 +69,7 @@ async function extractPosts(page: Page, seenPosts: SeenPost[]): Promise<CrawlRes
 
   await page.waitForSelector('[data-ad-rendering-role="story_message"]', { timeout: 10000 }).catch(() => {});
 
-  const scrollCount = 10;
+  const scrollCount = MAX_SCROLL;
 
   outerLoop:
   for (let scroll = 0; scroll < scrollCount; scroll++) {
@@ -120,10 +123,10 @@ async function extractPosts(page: Page, seenPosts: SeenPost[]): Promise<CrawlRes
         // Check if we've reached a previously seen post using multi-post matching
         const postId = extractFacebookPostId(url);
         const contentHash = createContentHash(cleanContent);
-        
+
         if (seenPosts.length > 0 && isPostSeen(postId, contentHash, seenPosts)) {
           const matchType = postId ? `post ID: ${postId}` : `content hash: ${contentHash}`;
-          console.log(`\nReached previously seen post (${matchType})`);
+          log.info(`Reached previously seen post (${matchType})`);
           stoppedReason = 'reached_previous';
           break outerLoop;
         }
@@ -134,7 +137,7 @@ async function extractPosts(page: Page, seenPosts: SeenPost[]): Promise<CrawlRes
           url
         });
 
-        console.log(`Captured post ${posts.length}: ${author} - ${cleanContent.substring(0, 30)}...`);
+        log.info(`Captured post ${posts.length}: ${author} - ${cleanContent.substring(0, 30)}...`);
       } catch {
         continue;
       }
@@ -149,7 +152,7 @@ async function extractPosts(page: Page, seenPosts: SeenPost[]): Promise<CrawlRes
 
 async function crawl(): Promise<void> {
   if (!existsSync(STATE_FILE)) {
-    console.error('No saved session. Run: bun run fb.ts --login');
+    log.fatal('No saved session. Run: bun run fb.ts --login');
     process.exit(1);
   }
 
@@ -158,40 +161,32 @@ async function crawl(): Promise<void> {
   const seenPosts = state.facebook.lastSeenPosts || [];
 
   if (seenPosts.length > 0) {
-    console.log(`Incremental crawl: tracking ${seenPosts.length} previously seen posts\n`);
+    log.info(`Incremental crawl: tracking ${seenPosts.length} previously seen posts`);
   } else {
-    console.log('First crawl: no previous state found\n');
+    log.info('First crawl: no previous state found');
   }
 
-  const browser = await chromium.launch({ headless: false });
+  const browser = await chromium.launch({ headless: true });
   const context = await browser.newContext({ storageState: STATE_FILE });
   const page = await context.newPage();
 
-  console.log('Navigating to Facebook favorites...');
+  log.start('Navigating to Facebook favorites...');
   await page.goto(FAVORITES_URL, { waitUntil: 'domcontentloaded', timeout: 60000 });
 
   if (page.url().includes('/login') || page.url().includes('checkpoint')) {
-    console.error('Session expired. Run: bun run fb.ts --login');
+    log.fatal('Session expired. Run: bun run fb.ts --login');
     process.exit(1);
   }
 
   await page.waitForTimeout(2000);
 
-  console.log('Scrolling and capturing posts...\n');
+  log.start('Scrolling and capturing posts...');
   const { posts, stoppedReason } = await extractPosts(page, seenPosts);
 
-  console.log('\n--- Results ---');
   if (posts.length === 0) {
-    console.log('No posts found.');
+    log.warn('No posts found.');
   } else {
-    for (const post of posts) {
-      console.log('---');
-      console.log(`Author: ${post.author}`);
-      console.log(`URL: ${post.url || 'N/A'}`);
-      console.log(`Content: ${post.content}\n`);
-    }
-    console.log(`Total: ${posts.length} posts`);
-    console.log(`Stopped reason: ${stoppedReason}`);
+    log.success(`Total: ${posts.length} posts (stopped: ${stoppedReason})`);
 
     // Generate and write MD file
     const crawlTime = new Date().toISOString();
@@ -201,7 +196,7 @@ async function crawl(): Promise<void> {
 
     // Update state with all captured posts
     updateFacebookState(posts.map(p => ({ url: p.url, content: p.content })));
-    console.log(`State updated with ${posts.length} new posts`);
+    log.success(`State updated with ${posts.length} new posts`);
   }
 
   await browser.close();
@@ -217,4 +212,4 @@ async function main(): Promise<void> {
   }
 }
 
-main().catch(console.error);
+main().catch((e) => { log.fatal(e); process.exit(1); });

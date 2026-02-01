@@ -50,5 +50,5 @@ fb-article-debug.html
 .serena/
 
 # Crawl output and state
-output/
+data/
 crawl-state.json

@@ -34,7 +34,7 @@ Crawls Facebook favorites feed and extracts posts.
 **Usage:**
 ```bash
 bun fb.ts --login  # First time: manual login, saves session
-bun fb.ts          # Crawl favorites feed, outputs to output/fb-{timestamp}.md
+bun fb.ts          # Crawl favorites feed, outputs to data/raw/fb-{timestamp}.md
 ```
 
 ### tweet.ts - Twitter/X Crawler
@@ -46,7 +46,7 @@ Crawls a Twitter list using the rettiwt-api package.
 
 **Usage:**
 ```bash
-bun tweet.ts  # Crawl Twitter list, outputs to output/tweet-{timestamp}.md
+bun tweet.ts  # Crawl Twitter list, outputs to data/raw/tweet-{timestamp}.md
 ```
 
 ### utils.ts - Shared Utilities
@@ -55,13 +55,41 @@ Common utilities for state management and markdown generation.
 
 **Features:**
 - `crawl-state.json`: Tracks last seen post/tweet for incremental crawling
-- `output/`: Timestamped markdown files with YAML frontmatter
+- `data/raw/`: Raw crawl output (timestamped markdown files with YAML frontmatter)
+- `data/lean/`: Cleaned output (deduped + URL trimmed, via `lean.ts`)
 - Incremental crawling: Stops when reaching previously seen content
+
+### lean.ts - Data Pipeline (raw → lean)
+
+Reads `data/raw/` and writes cleaned versions to `data/lean/`.
+
+**Cleaning rules:**
+- **Facebook:** Remove tracking params (`__cft__`, `__tn__`) from URLs; deduplicate posts by first 100 chars of content (keeps longest version)
+- **Gmail:** Strip markdown images `![...](...)` and empty tracking links
+- **Twitter:** No special cleaning (URLs already short)
+- **All:** Remove `### Content` subheading for compactness; add `sourceFile` to frontmatter
+
+**Usage:**
+```bash
+bun lean.ts                            # Process all files in data/raw/
+bun lean.ts data/raw/fb-2026-01-26-221711.md  # Process specific file
+bun lean.ts --today                    # Process today's files only
+```
+
+### logger.ts - Shared Logger
+
+All files use a shared `consola` logger from `logger.ts` instead of `console.log`/`console.error`.
+
+- Import: `import { log } from './logger'`
+- Methods: `log.start()`, `log.info()`, `log.success()`, `log.warn()`, `log.error()`, `log.fatal()`, `log.debug()`
+- Level controlled by `LOG_LEVEL` env var (default: `info`)
+- `LOG_LEVEL=debug` shows debug output (e.g. Gmail query strings)
+- `LOG_LEVEL=error` suppresses everything below error
 
 ### Output Format
 
-Crawl results are saved to `output/{platform}-{timestamp}.md` with YAML frontmatter containing:
-- `platform`: facebook or twitter
+Crawl results are saved to `data/raw/{platform}-{timestamp}.md` with YAML frontmatter containing:
+- `platform`: facebook, twitter, or gmail
 - `crawlTime`: ISO timestamp
 - `postCount`: Number of posts captured
-- `stoppedReason`: "reached_previous", "scroll_limit", or "api_limit"
+- `stoppedReason`: "reached_previous", "scroll_limit", "api_limit", or "query_exhausted"
