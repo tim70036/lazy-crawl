@@ -89,7 +89,7 @@ export function extractFacebookPostId(url: string): string | null {
 
   // Try to extract pfbid
   const pfbidMatch = url.match(/pfbid([a-zA-Z0-9]+)/);
-  if (pfbidMatch) return `pfbid${pfbidMatch[1].substring(0, 20)}`; // Truncate for consistency
+  if (pfbidMatch?.[1]) return `pfbid${pfbidMatch[1].substring(0, 20)}`; // Truncate for consistency
 
   // Try to extract story_fbid
   const storyMatch = url.match(/story_fbid=(\d+)/);

@@ -73,7 +73,7 @@ export function cleanGmailContent(content: string): string {
 
 export function parseFrontmatter(raw: string): { frontmatter: Frontmatter; body: string } {
   const match = raw.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
-  if (!match) throw new Error('No frontmatter found');
+  if (!match || !match[1] || !match[2]) throw new Error('No frontmatter found');
 
   const fm: Record<string, string | number> = {};
   for (const line of match[1].split('\n')) {
@@ -92,7 +92,7 @@ export function parseFrontmatter(raw: string): { frontmatter: Frontmatter; body:
     fm[key] = value;
   }
 
-  return { frontmatter: fm as unknown as Frontmatter, body: match[2] };
+  return { frontmatter: fm as Frontmatter, body: match[2] };
 }
 
 export function parsePosts(body: string, platform: string): { title: string; posts: Post[] } {
@@ -101,15 +101,15 @@ export function parsePosts(body: string, platform: string): { title: string; pos
   const posts: Post[] = [];
 
   // Find title (# line)
-  const titleIdx = lines.findIndex(l => l.startsWith('# '));
-  if (titleIdx !== -1) title = lines[titleIdx];
+  const titleLine = lines.find(l => l.startsWith('# '));
+  if (titleLine) title = titleLine;
 
   // Split by ## Post N or ## Email N
   const postSections = body.split(/(?=^## (?:Post|Email) \d+)/m).filter(s => s.match(/^## (?:Post|Email) \d+/));
 
   for (const section of postSections) {
     const sLines = section.split('\n');
-    const heading = sLines[0];
+    const heading = sLines[0]!;
     let author = '';
     let url = '';
     let date = '';
@@ -119,7 +119,7 @@ export function parsePosts(body: string, platform: string): { title: string; pos
 
     // Parse metadata lines
     for (let i = 1; i < sLines.length; i++) {
-      const line = sLines[i];
+      const line = sLines[i]!;
       if (line.startsWith('**Author:**')) {
         author = line.replace('**Author:**', '').trim();
       } else if (line.startsWith('**URL:**')) {
@@ -139,7 +139,7 @@ export function parsePosts(body: string, platform: string): { title: string; pos
     // Everything after ### Content (skip leading blank line)
     let contentLines = sLines.slice(contentStartIdx);
     // Remove leading empty lines
-    while (contentLines.length > 0 && contentLines[0].trim() === '') {
+    while (contentLines.length > 0 && contentLines[0]?.trim() === '') {
       contentLines.shift();
     }
 
@@ -161,7 +161,7 @@ export function parsePosts(body: string, platform: string): { title: string; pos
     // Trim trailing separator
     let content = mainContent.join('\n').replace(/\n---\s*$/, '').trim();
 
-    posts.push({ heading, author, url, date, subject, from, content, extra: extra.trim() });
+    posts.push({ heading, author, url, date: date || undefined, subject: subject || undefined, from: from || undefined, content, extra: extra.trim() });
   }
 
   return { title, posts };

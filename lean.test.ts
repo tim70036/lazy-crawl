@@ -103,9 +103,9 @@ Nvidia注資20億買CoreWeave股票
     const { title, posts } = parsePosts(body, 'facebook');
     expect(title).toBe('# Facebook Favorites Crawl');
     expect(posts).toHaveLength(1);
-    expect(posts[0].author).toBe('IEObserve 國際經濟觀察');
-    expect(posts[0].url).toContain('facebook.com');
-    expect(posts[0].content).toContain('Nvidia注資20億');
+    expect(posts[0]!.author).toBe('IEObserve 國際經濟觀察');
+    expect(posts[0]!.url).toContain('facebook.com');
+    expect(posts[0]!.content).toContain('Nvidia注資20億');
   });
 
   test('parses Twitter posts with quoted tweet', () => {
@@ -130,9 +130,9 @@ Nvidia注資20億買CoreWeave股票
 
     const { posts } = parsePosts(body, 'twitter');
     expect(posts).toHaveLength(1);
-    expect(posts[0].content).toBe('学习了');
-    expect(posts[0].extra).toContain('Quoted Tweet');
-    expect(posts[0].extra).toContain('有色金属');
+    expect(posts[0]!.content).toBe('学习了');
+    expect(posts[0]!.extra).toContain('Quoted Tweet');
+    expect(posts[0]!.extra).toContain('有色金属');
   });
 
   test('parses Gmail emails', () => {
@@ -155,9 +155,9 @@ Katie posted new notes
 
     const { posts } = parsePosts(body, 'gmail');
     expect(posts).toHaveLength(1);
-    expect(posts[0].from).toBe('Substack <no-reply@substack.com>');
-    expect(posts[0].subject).toBe('Katie posted new notes');
-    expect(posts[0].content).toContain('Email from Substack');
+    expect(posts[0]!.from).toBe('Substack <no-reply@substack.com>');
+    expect(posts[0]!.subject).toBe('Katie posted new notes');
+    expect(posts[0]!.content).toContain('Email from Substack');
   });
 });
 
@@ -184,7 +184,7 @@ describe('dedupPosts', () => {
     };
     const result = dedupPosts([short, long]);
     expect(result).toHaveLength(1);
-    expect(result[0].content).toContain('plus extra content');
+    expect(result[0]!.content).toContain('plus extra content');
   });
 
   test('keeps all posts when content differs', () => {

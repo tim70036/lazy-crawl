@@ -49,7 +49,7 @@ async function crawl(): Promise<void> {
     pageCount++;
     log.info(`Fetching page ${pageCount}...`);
 
-    const result = await rettiwt.list.tweets(LIST_ID, TWEETS_PER_PAGE, cursor);
+    const result = await rettiwt.list.tweets(LIST_ID!, TWEETS_PER_PAGE, cursor);
 
     if (!result.list || result.list.length === 0) {
       log.warn('No more tweets found.');
