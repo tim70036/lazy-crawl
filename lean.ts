@@ -35,24 +35,13 @@ export interface ParsedFile {
 const RAW_DIR = './data/raw';
 const LEAN_DIR = './data/lean';
 
-// --- URL Cleaning ---
+// --- Date Formatting ---
 
-export function cleanFacebookUrl(url: string): string {
-  if (!url || url === 'N/A') return url;
-  try {
-    const u = new URL(url);
-    // Remove Facebook tracking parameters
-    u.searchParams.delete('__cft__[0]');
-    u.searchParams.delete('__tn__');
-    // If no params left, return clean URL
-    if ([...u.searchParams].length === 0) {
-      return `${u.origin}${u.pathname}`;
-    }
-    return u.toString();
-  } catch {
-    // Fallback: strip query params with regex
-    return url.replace(/\?__cft__\[0\]=.*$/, '');
-  }
+export function formatDate(isoDate: string | undefined): string {
+  // Extract YYYY-MM-DD from ISO timestamp
+  if (!isoDate) return '';
+  const dateOnly = isoDate.split('T')[0];
+  return dateOnly ?? '';
 }
 
 export function cleanGmailContent(content: string): string {
@@ -197,11 +186,9 @@ export function generateLeanMd(parsed: ParsedFile, sourceFile: string): string {
   // Apply platform-specific cleaning
   if (platform === 'facebook') {
     posts = dedupPosts(posts);
-    posts = posts.map(p => ({ ...p, url: cleanFacebookUrl(p.url) }));
   } else if (platform === 'gmail') {
     posts = posts.map(p => ({ ...p, content: cleanGmailContent(p.content) }));
   }
-  // Twitter: no special cleaning needed (URLs are already short)
 
   // Build frontmatter
   const fm = [
@@ -215,15 +202,18 @@ export function generateLeanMd(parsed: ParsedFile, sourceFile: string): string {
   ].join('\n');
 
   // Build posts
-  const postsContent = posts.map((post, i) => {
+  const postsContent = posts.map((post) => {
     const lines: string[] = [];
-    lines.push(`## Post ${i + 1}`);
 
-    if (post.author) lines.push(`**Author:** ${post.author}`);
-    if (post.from) lines.push(`**From:** ${post.from}`);
-    if (post.subject) lines.push(`**Subject:** ${post.subject}`);
-    if (post.date) lines.push(`**Date:** ${post.date}`);
-    if (post.url && post.url !== 'N/A') lines.push(`**URL:** ${post.url}`);
+    // Simplified metadata (no bold, no post numbers)
+    if (post.author) lines.push(`Author: ${post.author}`);
+    if (post.from) lines.push(`From: ${post.from}`);
+    if (post.subject) lines.push(`Subject: ${post.subject}`);
+    if (post.date) {
+      const formattedDate = formatDate(post.date);
+      if (formattedDate) lines.push(`Date: ${formattedDate}`);
+    }
+    // URLs removed - can trace back via sourceFile
 
     lines.push('');
     lines.push(post.content);
@@ -234,9 +224,9 @@ export function generateLeanMd(parsed: ParsedFile, sourceFile: string): string {
     }
 
     return lines.join('\n');
-  }).join('\n\n---\n\n');
+  }).join('\n---\n');
 
-  return `${fm}\n\n${parsed.title}\n\n${postsContent}\n`;
+  return `${fm}\n\n${postsContent}\n`;
 }
 
 // --- CLI ---

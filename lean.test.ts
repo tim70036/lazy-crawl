@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import {
-  cleanFacebookUrl,
   cleanGmailContent,
+  formatDate,
   parseFrontmatter,
   parsePosts,
   parseMdFile,
@@ -12,25 +12,15 @@ import {
   type ParsedFile,
 } from './lean';
 
-// --- cleanFacebookUrl ---
+// --- formatDate ---
 
-describe('cleanFacebookUrl', () => {
-  test('strips __cft__ and __tn__ tracking params', () => {
-    const dirty =
-      'https://www.facebook.com/intleconobserve/posts/pfbid02FAxx?__cft__[0]=AZZwr9eN9j4&__tn__=%2CP-R';
-    expect(cleanFacebookUrl(dirty)).toBe(
-      'https://www.facebook.com/intleconobserve/posts/pfbid02FAxx',
-    );
+describe('formatDate', () => {
+  test('extracts YYYY-MM-DD from ISO timestamp', () => {
+    expect(formatDate('2026-01-26T14:17:11.802Z')).toBe('2026-01-26');
   });
 
-  test('returns N/A as-is', () => {
-    expect(cleanFacebookUrl('N/A')).toBe('N/A');
-  });
-
-  test('leaves clean URLs untouched', () => {
-    const clean = 'https://www.facebook.com/photo?fbid=123';
-    // fbid is not a tracking param, so the full URL should be preserved
-    expect(cleanFacebookUrl(clean)).toBe(clean);
+  test('handles dates without time component', () => {
+    expect(formatDate('2026-02-13')).toBe('2026-02-13');
   });
 });
 
@@ -209,7 +199,7 @@ describe('dedupPosts', () => {
 // --- generateLeanMd ---
 
 describe('generateLeanMd', () => {
-  test('generates lean markdown for Facebook with sourceFile and no ### Content', () => {
+  test('generates lean markdown for Facebook with simplified format', () => {
     const parsed: ParsedFile = {
       frontmatter: {
         platform: 'facebook',
@@ -238,17 +228,31 @@ describe('generateLeanMd', () => {
     };
 
     const result = generateLeanMd(parsed, 'fb-2026-01-26-221711.md');
+    
+    // Should contain sourceFile
     expect(result).toContain('sourceFile: "fb-2026-01-26-221711.md"');
+    
+    // Should NOT contain old format elements
     expect(result).not.toContain('### Content');
-    // Facebook URL should be cleaned
-    expect(result).not.toContain('__cft__');
-    // N/A URLs should be omitted
+    expect(result).not.toContain('## Post 1'); // No post numbering
+    expect(result).not.toContain('## Post 2');
+    expect(result).not.toContain('**Author:**'); // No bold markdown
+    expect(result).not.toContain('**URL:**'); // No URLs at all
+    expect(result).not.toContain('__cft__'); // No tracking params
     expect(result).not.toContain('N/A');
-    // postCount in frontmatter should reflect actual post count
+    expect(result).not.toContain('# Facebook Favorites Crawl'); // No title line
+    
+    // Should contain new simplified format
+    expect(result).toContain('Author: Author A'); // Plain text metadata
+    expect(result).toContain('內容 A');
+    expect(result).toContain('內容 B');
     expect(result).toContain('postCount: 2');
+    
+    // Should use compact separators
+    expect(result).toMatch(/內容 A\n---\nAuthor: Author A/); // Single newline separator
   });
 
-  test('generates lean markdown for Gmail with cleaned content', () => {
+  test('generates lean markdown for Gmail with cleaned content and simplified format', () => {
     const parsed: ParsedFile = {
       frontmatter: {
         platform: 'gmail',
@@ -264,6 +268,7 @@ describe('generateLeanMd', () => {
           subject: 'New notes',
           author: '',
           url: '',
+          date: '2026-01-26T10:00:00.000Z',
           content:
             'Hello\n\n![image](https://example.com/img.png)\n\n[](https://tracking.link)\n\nReal content here',
           extra: '',
@@ -273,10 +278,58 @@ describe('generateLeanMd', () => {
     };
 
     const result = generateLeanMd(parsed, 'gmail-2026-01-26-221811.md');
+    
+    // Should NOT contain old format elements
     expect(result).not.toContain('![image]');
     expect(result).not.toContain('tracking.link');
+    expect(result).not.toContain('**From:**'); // No bold markdown
+    expect(result).not.toContain('**Subject:**');
+    expect(result).not.toContain('**Date:**');
+    
+    // Should contain new simplified format
     expect(result).toContain('Real content here');
-    expect(result).toContain('**From:** Substack');
+    expect(result).toContain('From: Substack <no-reply@substack.com>'); // Plain text
+    expect(result).toContain('Subject: New notes');
+    expect(result).toContain('Date: 2026-01-26'); // Shortened date
+  });
+
+  test('generates lean markdown for Twitter with quoted tweet sections unchanged', () => {
+    const parsed: ParsedFile = {
+      frontmatter: {
+        platform: 'twitter',
+        crawlTime: '2026-01-26T09:46:20.000Z',
+        postCount: 1,
+        stoppedReason: 'scroll_limit',
+      },
+      title: '# Twitter List Crawl',
+      posts: [
+        {
+          heading: '## Post 1',
+          author: 'vivienna.btc (@viviennaBTC)',
+          url: 'https://x.com/viviennaBTC/status/123',
+          date: '2026-01-26T09:46:20.000Z',
+          content: '学习了',
+          extra: '### Quoted Tweet\n\n给最近炒有色金属的朋友们分享一个指标',
+        },
+      ],
+      raw: '',
+    };
+
+    const result = generateLeanMd(parsed, 'tweet-2026-01-26-221518.md');
+    
+    // Should NOT contain old format elements
+    expect(result).not.toContain('## Post 1'); // No post numbering
+    expect(result).not.toContain('**Author:**'); // No bold markdown
+    expect(result).not.toContain('**URL:**'); // No URLs
+    
+    // Should contain new simplified format
+    expect(result).toContain('Author: vivienna.btc (@viviennaBTC)'); // Plain text
+    expect(result).toContain('Date: 2026-01-26'); // Shortened date
+    expect(result).toContain('学习了');
+    
+    // Twitter sections should remain unchanged (as per user request)
+    expect(result).toContain('### Quoted Tweet'); // Keep as-is
+    expect(result).toContain('有色金属');
   });
 });
 
