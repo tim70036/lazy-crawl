@@ -50,5 +50,10 @@ fb-article-debug.html
 .serena/
 
 # Crawl output and state
-data/
+data/raw/
+data/lean/
 crawl-state.json
+
+# But track these analysis outputs
+!data/narrative/
+!data/insight/
