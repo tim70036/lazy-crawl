@@ -10,7 +10,7 @@
         "google-auth-library": "^10.5.0",
         "open": "^11.0.0",
         "playwright": "^1.57.0",
-        "rettiwt-api": "^6.2.0",
+        "rettiwt-api": "^6.2.1",
         "turndown": "^7.2.2",
       },
       "devDependencies": {
@@ -289,7 +289,7 @@
 
     "require-from-string": ["require-from-string@2.0.2", "", {}, "sha512-Xf0nWe6RseziFMu+Ap9biiUbmplq6S9/p+7w7YXP/JBHhrUDDUhwa+vANyubuqfZWTveU//DYVGsDG7RKL/vEw=="],
 
-    "rettiwt-api": ["rettiwt-api@6.2.0", "", { "dependencies": { "axios": "^1.8.4", "chalk": "^5.4.1", "commander": "^11.1.0", "cookiejar": "^2.1.4", "https-proxy-agent": "^7.0.6", "jsdom": "^27.2.0", "node-html-parser": "^7.0.1", "x-client-transaction-id": "^0.1.9" }, "bin": { "rettiwt": "dist/cli.js" } }, "sha512-tO9VrED+0LqWasHhDGYPXsrziv6p4845z1kXh7A19TjyQbBYPXU/BqhMR3BN/D5D4mJAPVQj1KghfJRTJtf+Qg=="],
+    "rettiwt-api": ["rettiwt-api@6.2.1", "", { "dependencies": { "axios": "^1.8.4", "chalk": "^5.4.1", "commander": "^11.1.0", "cookiejar": "^2.1.4", "https-proxy-agent": "^7.0.6", "jsdom": "^27.2.0", "node-html-parser": "^7.0.1", "x-client-transaction-id": "^0.2.0" }, "bin": { "rettiwt": "dist/cli.js" } }, "sha512-wemzCkNr98mWiBdQC/F/t3lKaHsNtjo/9WhvXpniW83kNbYqxnDdF0ZvJETYDx5G4+TGy3k2/MNsWPMcvS6Gew=="],
 
     "rimraf": ["rimraf@5.0.10", "", { "dependencies": { "glob": "^10.3.7" }, "bin": { "rimraf": "dist/esm/bin.mjs" } }, "sha512-l0OE8wL34P4nJH/H2ffoaniAokM2qSmrtXHmlpvYr5AVVX8msAyW0l8NVJFDxlSK4u3Uh/f41cQheDVdnYijwQ=="],
 
@@ -363,7 +363,7 @@
 
     "wsl-utils": ["wsl-utils@0.3.1", "", { "dependencies": { "is-wsl": "^3.1.0", "powershell-utils": "^0.1.0" } }, "sha512-g/eziiSUNBSsdDJtCLB8bdYEUMj4jR7AGeUo96p/3dTafgjHhpF4RiCFPiRILwjQoDXx5MqkBr4fwWtR3Ky4Wg=="],
 
-    "x-client-transaction-id": ["x-client-transaction-id@0.1.9", "", { "dependencies": { "linkedom": "^0.18.9" } }, "sha512-CES4zgkJ0wbfFWm0qgdKphthyb+L7lVHymgOY15v6ivcWSx5p9lp5kzAed+BuqJSP7bS0GbQyJ16ONkRthgsUw=="],
+    "x-client-transaction-id": ["x-client-transaction-id@0.2.0", "", { "dependencies": { "linkedom": "^0.18.9" } }, "sha512-E2EgeyQpeOLOk4z7OS+IDpj7xwiKeUQHly6L1dTG2YYCEGtR6JLa6Ft5ra3pB7bY5esPb6Pqokt1DQeRm73i5g=="],
 
     "xml-name-validator": ["xml-name-validator@5.0.0", "", {}, "sha512-EvGK8EJ3DhaHfbRlETOWAS5pO9MZITeauHKJyb8wyajUfQUenkIg2MvLDTZ4T/TgIcm3HU0TFBgWWboAZ30UHg=="],
 
