@@ -52,7 +52,9 @@ fb-article-debug.html
 # Crawl output and state
 data/raw/
 data/lean/
+data/user-crawl/
 crawl-state.json
+user-crawl-config.json
 
 # But track these analysis outputs
 !data/narrative/

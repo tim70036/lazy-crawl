@@ -86,6 +86,22 @@ All files use a shared `consola` logger from `logger.ts` instead of `console.log
 - `LOG_LEVEL=debug` shows debug output (e.g. Gmail query strings)
 - `LOG_LEVEL=error` suppresses everything below error
 
+### user-crawl.ts - Ad-hoc User Tweet Crawler
+
+Standalone script for crawling specific Twitter users' tweets filtered by keywords and date range. Independent from the main crawl pipeline (own config, own output dir, no shared state).
+
+- Uses `rettiwt.tweet.search()` with `fromUsers` + `includeWords` filters
+- Runs one search per keyword (API requires ALL `includeWords` match), then deduplicates by tweet ID
+- Config in `user-crawl-config.json`: users, keywords, startDate, endDate, tweetsPerPage, maxPages
+- Output to `data/user-crawl/{username}-{date}.md` in compact AI-friendly format (no URLs, no post numbers, minimal metadata)
+- Env overrides: `USER_CRAWL_CONFIG`, `USER_CRAWL_OUTPUT_DIR`
+
+**Usage:**
+```bash
+vim user-crawl-config.json  # Edit users, keywords, date range
+bun user-crawl.ts           # Run crawl, outputs to data/user-crawl/
+```
+
 ### Output Format
 
 Crawl results are saved to `data/raw/{platform}-{timestamp}.md` with YAML frontmatter containing:
